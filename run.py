@@ -1,9 +1,9 @@
 from langchain.chat_models import init_chat_model
-from langchain.messages import HumanMessage
+from langchain.messages import HumanMessage, SystemMessage
 from pypdf import PdfReader
 from typing import TypedDict, Dict
-from langchain_core.prompts import PromptTemplate
 from langgraph.graph import StateGraph, END
+from langchain.agents import create_agent
 
 class MedicalDocState(TypedDict):
     raw_document: str
@@ -13,27 +13,39 @@ class ClinicalLabAssistant:
     def __init__(self):
         self.llm = init_chat_model("deepseek-v4-flash")
         self.workflow = self._create_workflow()
+        self.med_doc_classifier_agent = self._create_med_doc_classifier_agent()
 
-    def _classify_med_doc(self, state: MedicalDocState) -> Dict:
-        prompt = PromptTemplate(
-            input_variables=['document'], 
-            template="""
+    def _create_med_doc_classifier_agent(self):
+        system_prompt = """
                 Determine the type of this medical document.
-                Options: 'blood_test', 'urine_test', 'unknown'.
-                Document: {document}
+                Options: 'blood_test', 'urine_test', 'stool_test', 'smear_test', 'unknown'.
                 Answer in one word.
-                """
-            )
-        message = HumanMessage(
-            content = prompt.format(document=state['raw_document'])
+            """
+        agent = create_agent(
+            model=self.llm,
+            tools = [],
+            system_prompt=SystemMessage(content=system_prompt),
         )
-        response = self.llm.invoke([message])
+        return agent
+        
+    def _classify_med_doc(self, state: MedicalDocState) -> Dict:
+
+        response = self.med_doc_classifier_agent.invoke({
+            "messages": [
+                HumanMessage(content=state["raw_document"])
+            ]
+        })
+        print(response['messages'])
         valid_types = ['blood_test', 'urine_test', 'unknown']
-        doc_type = response.content.strip().lower()
+        last_message = response['messages'][-1]
+        doc_type = last_message.content.strip().lower()
         if doc_type not in valid_types:
             doc_type = 'unknown'
 
         return {"document_type": doc_type}
+
+    def _extract_blood_data(self) -> StateGraph:
+        pass
 
     def _create_workflow(self) -> StateGraph:
         workflow = StateGraph(MedicalDocState)
@@ -54,8 +66,7 @@ def main():
 
     assistant = ClinicalLabAssistant()
     
-    initial_state = {"raw_document": document, "document_type": ""}
-    final_state = assistant.workflow.invoke(initial_state)
+    final_state = assistant.workflow.invoke({"raw_document": document})
     
     print(final_state["document_type"])
     
