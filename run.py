@@ -1,42 +1,47 @@
 from langchain.chat_models import init_chat_model
-from langchain.messages import HumanMessage, SystemMessage
+from langchain.messages import HumanMessage, SystemMessage, AnyMessage
 from pypdf import PdfReader
-from typing import TypedDict, Dict
+from typing import TypedDict, Dict, Annotated
 from langgraph.graph import StateGraph, END
 from langchain.agents import create_agent
+from langchain_deepseek import ChatDeepSeek
+from langgraph.graph.message import add_messages
+
+MED_DOC_CLASSIFIER_SYS_PROMPT = """
+        Determine the type of this medical document.
+        Options: 'blood_test', 'urine_test', 'stool_test', 'smear_test', 'unknown'.
+        Answer in one word.
+    """
 
 class MedicalDocState(TypedDict):
     raw_document: str
     document_type: str
+    #messages: Annotated[list[AnyMessage], add_messages] 
 
 class ClinicalLabAssistant:
     def __init__(self):
-        self.llm = init_chat_model("deepseek-v4-flash")
+        #self.llm = init_chat_model("deepseek-v4-flash")
+        self.llm = ChatDeepSeek(model="deepseek-v4-flash")
         self.workflow = self._create_workflow()
         self.med_doc_classifier_agent = self._create_med_doc_classifier_agent()
 
     def _create_med_doc_classifier_agent(self):
-        system_prompt = """
-                Determine the type of this medical document.
-                Options: 'blood_test', 'urine_test', 'stool_test', 'smear_test', 'unknown'.
-                Answer in one word.
-            """
         agent = create_agent(
             model=self.llm,
             tools = [],
-            system_prompt=SystemMessage(content=system_prompt),
+            system_prompt=SystemMessage(content=MED_DOC_CLASSIFIER_SYS_PROMPT),
         )
         return agent
         
     def _classify_med_doc(self, state: MedicalDocState) -> Dict:
-
         response = self.med_doc_classifier_agent.invoke({
             "messages": [
+                #SystemMessage(content=MED_DOC_CLASSIFIER_SYS_PROMPT),
                 HumanMessage(content=state["raw_document"])
             ]
         })
         print(response['messages'])
-        valid_types = ['blood_test', 'urine_test', 'unknown']
+        valid_types = ['blood_test', 'urine_test', 'stool_test', 'smear_test', 'unknown']
         last_message = response['messages'][-1]
         doc_type = last_message.content.strip().lower()
         if doc_type not in valid_types:
