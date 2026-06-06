@@ -16,7 +16,7 @@ MED_DOC_CLASSIFIER_SYS_PROMPT = """
 class MedicalDocState(TypedDict):
     raw_document: str
     document_type: str
-    #messages: Annotated[list[AnyMessage], add_messages] 
+    messages: Annotated[list[AnyMessage], add_messages] 
 
 class ClinicalLabAssistant:
     def __init__(self):
@@ -34,20 +34,25 @@ class ClinicalLabAssistant:
         return agent
         
     def _classify_med_doc(self, state: MedicalDocState) -> Dict:
+        llm_input = [
+            SystemMessage(content=MED_DOC_CLASSIFIER_SYS_PROMPT),
+            #HumanMessage(content=state["raw_document"]),
+        ]
+
         response = self.med_doc_classifier_agent.invoke({
-            "messages": [
-                #SystemMessage(content=MED_DOC_CLASSIFIER_SYS_PROMPT),
-                HumanMessage(content=state["raw_document"])
-            ]
+            "messages": [HumanMessage(content=state["raw_document"])]
         })
-        print(response['messages'])
+
+        response_messages = response.get("messages", [])
+        new_messages = state["messages"] + llm_input + response_messages
+
         valid_types = ['blood_test', 'urine_test', 'stool_test', 'smear_test', 'unknown']
-        last_message = response['messages'][-1]
+        last_message = response_messages[-1] if response_messages else None
         doc_type = last_message.content.strip().lower()
         if doc_type not in valid_types:
             doc_type = 'unknown'
 
-        return {"document_type": doc_type}
+        return {"document_type": doc_type, "messages": new_messages}
 
     def _extract_blood_data(self) -> StateGraph:
         pass
@@ -73,6 +78,7 @@ def main():
     
     final_state = assistant.workflow.invoke({"raw_document": document})
     
+    print(final_state["messages"])
     print(final_state["document_type"])
     
 if __name__ == "__main__":
