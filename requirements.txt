@@ -2,4 +2,5 @@ langgraph
 pypdf
 langchain
 langchain-deepseek
+langchain-openai
 cryptography>=3.1
