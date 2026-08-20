@@ -4,3 +4,6 @@ langchain
 langchain-deepseek
 langchain-openai
 cryptography>=3.1
+sqlalchemy
+mcp
+langchain_mcp_adapters
